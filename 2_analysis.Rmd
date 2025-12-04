@@ -1,0 +1,398 @@
+---
+title: "2_analysis"
+author: "Luna Zhan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  word_document: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+load("C:/E_Drive/Biostat/Project 1/Data/all_dat.rds")
+#load("C:/E_Drive/Biostat/Project 1/Data/fulldata.Rdata") #this is joined dataset from kasper
+load("C:/E_Drive/Biostat/Project 1/Data/census_dat_map.rds")
+
+nata_air <- read.csv("C:/E_Drive/Biostat/Project 1/Data/Tract_EQI_PCA_Variables_Transformed_and_Nontransformed_2011_2015.csv")
+
+
+options(scipen=999)
+
+knitr::opts_chunk$set(message =  F, echo = F, warning = F, fig.width = 9, fig.height = 7, fig.align="center")
+
+set.seed(123)
+
+#usethis::use_github()
+
+```
+
+
+```{r helper functions, include=FALSE}
+
+library(reportRmd)
+library(dplyr)
+library(flextable)
+library(patchwork)
+library(ggplot2)
+library(scales)
+library(finalfit)
+
+flextab <- function(dat){
+    for(i in 1:(count(dat[1])[1,1])){
+  if (dat[i,1]  != "" & dat[i,1] %in% recode$var){
+  dat[i,1] <- recode$label[recode$var == dat[i,1]]
+  }
+}
+   dat %>% flextable::flextable() %>% 
+    bold( bold = TRUE, part = "header") %>% 
+    align(align= "center", part = "all") %>% 
+    align(align = "left", j = 1)%>%
+    labelizor(part = "header", 
+              labels =labels)
+}
+
+## var labels 
+recode <- data.frame(var=c("max_pm_pred","mean_pm_pred", "medage", "pop", "white", "black", "asian", "edu_total", "medinc", "occ_total",
+  "home_value", "pop_num", "ACCESS2_CrudePrev", "BINGE_CrudePrev",
+  "BPHIGH_CrudePrev", "BPMED_CrudePrev", "CANCER_CrudePrev",
+  "CASTHMA_CrudePrev", "CHD_CrudePrev", "CHECKUP_CrudePrev",
+  "CHOLSCREEN_CrudePrev", "COLON_SCREEN_CrudePrev", "CSMOKING_CrudePrev",
+  "COREM_CrudePrev", "COREW_CrudePrev", "COPD_CrudePrev",
+  "DENTAL_CrudePrev", "DIABETES_CrudePrev", "HIGHCHOL_CrudePrev",
+  "KIDNEY_CrudePrev", "LPA_CrudePrev", "MAMMOUSE_CrudePrev",
+  "MHLTH_CrudePrev", "OBESITY_CrudePrev", "PAPTEST_CrudePrev",
+  "PHLTH_CrudePrev", "SLEEP_CrudePrev", "STROKE_CrudePrev", "n_obs", "nataIndex", "time2work", "nata_ozone"),
+                          label=c('Max PM2.5',
+                                  'Mean PM2.5', "Median age", "Total population", "White (%)", "Black (%)", "Asian (%)",
+  "Education (total index)", "Median income", "Occupation (total index)",
+  "Median home value", "Total population",
+  "No health insurance (%)", "Binge drinking (%)",
+  "High blood pressure (%)", "Taking BP meds (%)", "Cancer prevalence (%)",
+  "Current asthma (%)", "Coronary heart disease (%)",
+  "Annual checkup (%)", "Cholesterol screening (%)",
+  "Colon cancer screening (%)", "Current smoking (%)",
+  "Core men health indicator (%)", "Core women health indicator (%)",
+  "COPD (%)", "Dental visit (%)", "Diabetes (%)", "High cholesterol (%)",
+  "Kidney disease (%)", "Physical inactivity (%)",
+  "Mammogram use (%)", "Poor mental health (%)",
+  "Obesity (%)", "Pap test (%)", "Poor physical health (%)",
+  "Sleep <7 hours (%)", "Stroke (%)", "Number of daily PM2.5 measures", "NATA Respiratory Index", "Half-Year Mean PM2.5", "NATA Measured Ozone 2010-2015"))
+
+
+
+set_flextable_defaults(
+  font.color = "black",
+  border.color = "gray",
+  font.size = 12, font.family = "sans",
+  table.layout = "autofit",
+  theme_fun = "theme_vanilla", 
+  text.align = "center", 
+  digits = 2)
+
+
+finalfittab1 <- function(dataset = dataset, explanatory= explanatory, dependent = NULL,  p = TRUE, p_cat = "chisq", total_col = TRUE, na_to_prop =  FALSE, cont = "median", add_row_totals =  F ){
+  summary_factorlist(dataset %>%  mutate_if(is.character,funs(factor(.))), 
+                     dependent = dependent, 
+                     explanatory = explanatory, 
+                     na_include = TRUE, 
+                     na_to_prop =  na_to_prop , 
+                     p = p, 
+                     na_to_p =  FALSE,  
+                     p_cat = p_cat,
+                     cont = cont, 
+                     total_col = total_col, 
+                     add_col_totals = TRUE,  
+                     add_row_totals =  add_row_totals,
+                     col_totals_prefix = "N = ",
+                     digits =  c(1,1,2,0,0))-> t1 ## Table specifications
+  
+  if (add_row_totals ==  T){
+   t1 <- t1 %>% select(-"Total N")
+   }
+    ## Row Name Specifications 
+  for(i in 1:(count(t1[1])[1,1])){
+  if (t1[i,1]  != "" & t1[i,1] %in% recode$var){
+  t1[i,1] <- recode$label[recode$var == t1[i,1]]  
+  }
+}
+ ## Table style Specifications 
+ t1 %>% flextable::flextable() %>% 
+    bold( bold = TRUE, part = "header") %>% 
+    bold( bold = TRUE, i = 1) %>% 
+    align(align= "center", part = "all") %>% 
+    align(align = "left", j = 1) %>% 
+   align(align = "right", j = 2) %>%
+    labelizor(part = "header", 
+              labels = c("label" = "", "levels" = "", "Chemotherapy +/- Radiation" = "Palliative Chemotherapy +/- Radiation", "Palliative RT only" = "Palliative RT Alone" , "all" = "Total"))
+  
+}
+
+## column labels 
+              labels = c("label" = "", "levels" = "", "PlaceName" = "City", "totalpop" = "Total Population" , "all" = "Total")
+
+```
+
+
+```{r generating merged dataset, include=FALSE}
+
+##select variables 
+census_dat <- census_dat %>% select(GEOID, medage, pop, white, black, asian, edu_total, medinc, occ_total, home_value)
+census_dat <- left_join(census_dat, census_dat_map %>% select(GEOID, geometry))
+
+
+census_dat <- census_dat %>% mutate(across(c(white, black, asian, edu_total, occ_total), ~as.numeric(.x)*100/pop) )## convert all this to prop first, rerun network
+census_dat$GEOID <- as.numeric(census_dat$GEOID)
+air_aggregate <- air_aggregate %>% select(ctfips, mean_pm_pred, max_pm_pred, n) %>% rename(n_obs = n)
+air_aggregate$max_pm_pred <- as.numeric(air_aggregate$max_pm_pred)
+
+colnames(data_500)
+data_500 <- data_500 %>% select(StateAbbr:ACCESS2_CrudePrev, BINGE_CrudePrev,    BPHIGH_CrudePrev, BPMED_CrudePrev, CANCER_CrudePrev, CASTHMA_CrudePrev, CHD_CrudePrev, CHECKUP_CrudePrev, CHOLSCREEN_CrudePrev, COLON_SCREEN_CrudePrev, CSMOKING_CrudePrev, COREM_CrudePrev, COREW_CrudePrev, COPD_CrudePrev, DENTAL_CrudePrev, DIABETES_CrudePrev, HIGHCHOL_CrudePrev, KIDNEY_CrudePrev, LPA_CrudePrev, MAMMOUSE_CrudePrev, MHLTH_CrudePrev, OBESITY_CrudePrev, PAPTEST_CrudePrev, PHLTH_CrudePrev, SLEEP_CrudePrev, STROKE_CrudePrev)
+
+
+
+## merging 
+data_full <- full_join(data_500, air_aggregate, by = c("TractFIPS" = "ctfips")) %>% full_join(census_dat, c("TractFIPS" = "GEOID"))
+
+data_full <- left_join(data_full, nata_air %>%  select(joinID = tract,   nataIndex = nata_sum,
+  time2work,
+  nata_ozone = ozone) %>% distinct(joinID, .keep_all = T), by = c("TractFIPS" = "joinID"))
+
+
+
+
+# check for duplicates 
+data_full %>% janitor::get_dupes(TractFIPS)
+```
+
+
+```{r data processing, include  = F}
+## inclusion exclusion: 
+## census tracts not included in the city 500 project are excluded from the prediction modeles 
+data_full <- data_full %>% mutate(cities_500_data = ifelse(TractFIPS %in% data_500$TractFIPS, "Yes", "No"))
+
+
+
+## differences in population 
+
+data_full$pop_num <- as.numeric(gsub(",", "", data_full$Population2010))  ## extract numeric pop for city 500s 
+
+save(data_full, file = "C:/E_Drive/Biostat/Project 1/Data/full_data_20251124.rds")
+
+## comparing city 500 pop to census 2016 pop 
+data_full  %>% group_by(-abs(pop_num - pop), TractFIPS, pop, pop_num) %>% tally()
+data_full %>% group_by(PlaceName) %>% summarise(pop_num_total_500 = sum(pop_num))
+
+## Visualize prop without outcomes (data 500 data)  
+```
+
+
+
+
+## Data Summaries: 
+
+
+### Population with Data: Cities 
+
+```{r generalizability and bias, include=T}
+
+toppop_tab <-  data_full %>% group_by(PlaceName) %>% summarise(totalpop = sum(pop_num)) %>% arrange(-totalpop) 
+
+ftab <- rbind(toppop_tab[1:3, ], paste("..."),
+toppop_tab[(nrow(toppop_tab)-2):nrow(toppop_tab), ])  %>% as.data.frame() %>% flextab()
+
+  ftab <- set_caption(ftab, "Table 1. Included metropolitan areas, by total population") 
+ftab
+
+```
+
+## Table: comparing predictor differences between included and excluded census  tracts 
+```{r Table inc vs exclude, include=T}
+
+dat_tab <- set_labels(data_full, recode)
+
+## use census data for missingness table 
+noncity_vars <- colnames(data_full %>% select(mean_pm_pred:nata_ozone)) 
+finalfittab1( dat_tab, explanatory = noncity_vars, dependent =  'cities_500_data',  p = F, total_col =  F,  add_row_total = TRUE) 
+
+```
+
+### Table 1. Descriptive Summary of variables included (based on city 500 data availability)
+
+```{r Demographics table 1, include=T}
+
+dat_tab <- set_labels(data_full, recode)
+
+## variable list for analysis, using city 500 population instead of all census 2016 population  
+vars_1 <- colnames(data_full %>% select(-StateAbbr:-Population2010, -pop, -n_obs, -cities_500_data))
+
+city_vars <- colnames(data_full %>% select(ACCESS2_CrudePrev:STROKE_CrudePrev)) 
+#rm_covsum(data = dat_tab %>% filter(cities_500_data == "Yes"), covs = city_vars, show.tests=TRUE) 
+
+finalfittab1( dat_tab %>% filter(cities_500_data == "Yes"), explanatory = city_vars, p = F, total_col =  F,  add_row_total = TRUE)
+
+finalfittab1( dat_tab %>% filter(cities_500_data == "Yes"), explanatory = vars_1, dependent =  'cities_500_data',  p = F, total_col =  F, add_row_totals = T) 
+
+```
+
+
+## All data elements ranked by missingness within the included city census tracts 
+```{r data visualization, include=T}
+data_named <- data_full %>% filter( cities_500_data == "Yes") %>% select(all_of(vars_1)) 
+
+
+rename_vec <- recode %>% filter(var %in% vars_1) %>% select( label, var) %>%  tibble::deframe()
+
+
+
+data_named <- data_named %>%
+  select(all_of(vars_1)) %>% 
+  rename(all_of(rename_vec))
+
+# 1. Get the missing variable summary
+miss_summary <- naniar::miss_var_summary(data_named)
+
+# 2. Filter for the top 3 variables with the most missing data
+# The 'naniar' summary orders by default, so we can use top_n()
+top_3_missing <- naniar::miss_summary %>%
+  top_n(3, wt = n_miss) %>%
+  # Ensure the variables are ordered correctly for plotting if needed
+  arrange(desc(n_miss))
+
+naniar::gg_miss_var(data_named, show_pct = TRUE)
+
+```
+
+## Histogram of outcome measure 
+
+```{r visualize main outcome, include=T}
+cancer_histogram <- ggplot(data_named, aes(x = `Cancer prevalence (%)`)) + 
+  geom_histogram(alpha = 0.5, fill = "navy", color = "navy",
+                 bins = 100) + 
+  theme_minimal() + 
+  scale_x_continuous(labels = label_number(scale_cut =  cut_short_scale())) + 
+  labs(x = "Crude Cancer Prevalence")
+
+cancer_histogram
+# 
+# data <- left_join(data_500, air_aggregate, by = c("TractFIPS" = "ctfips")) 
+# 
+# data <- data %>% mutate(inclusion = ifelse(!is.na(mean_pm_pred)))
+
+```
+
+## Correlation between variables 
+```{r visualize correlation of features, include=T, fig.height= 12, fig.width= 12}
+library(corrr)
+dfw_estimates  <- data_named %>% na.omit() %>% 
+  sf::st_drop_geometry()
+
+correlations <- correlate(dfw_estimates, method = "pearson")
+
+network_plot(correlations)
+
+
+numeric_data <- data_named %>%
+  na.omit() %>% 
+ select(where(is.numeric))
+
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+
+
+corr <- corrplot::corrplot(cor_matrix, method = "color", 
+         col = colorRampPalette(c("blue","white","red"))(200),
+         tl.col = "black", tl.srt = 45,
+         number.cex = 0.7, 
+         title = "Correlation Matrix Heatmap", mar=c(0,0,1,0))
+
+corr
+
+    
+
+```
+
+
+
+
+```{r q3 e, include=FALSE, eval = F,  echo = T}
+library(xgboost)
+## making train and test set
+dat <- data_full %>% filter( cities_500_data == "Yes") %>% select(all_of(vars_1)) %>% na.omit()
+dat$ID <- 1:nrow(dat)
+dat <- dat %>%  mutate_if(is.numeric, log)  
+train <- dat[sample(seq_len(nrow(dat)), size = ceiling(nrow(dat) * 7/10)),]
+
+test <- dat[!dat$ID %in% train$ID,]
+
+
+train.label <- train$CANCER_CrudePrev ## this is just all the 0 and 1s of outcome 
+test.label <- test$CANCER_CrudePrev
+
+train.mat <- as.matrix( train %>% select(-ID, -CANCER_CrudePrev ))
+
+test.mat <- as.matrix( test  %>% select(-ID, -CANCER_CrudePrev ))
+
+
+## Create the sparse matrix for XGBoost
+dtrain <- xgb.DMatrix(data = train.mat, label = train.label, nthread = 2)
+dtest <- xgb.DMatrix(test.mat, label = test.label, nthread = 2) 
+
+## Create a watchlist
+watchlist <- list(train = dtrain, eval = dtest)
+
+## default model:
+param <- list(max_depth = 6, eta = 0.3, verbose = 0, nthread = 4,
+              objective = "reg:squarederror", eval_metric = "logloss", 
+              booster = "gbtree") #ths is like the control parameters that we are specificing. lambda is the penality like lasso. 
+
+
+xgb.mod <- xgb.train(param, dtrain, nrounds = 500, watchlist)
+
+# 
+# hyperparam_grid <- expand.grid(
+#   nrounds = seq(from = 100, to = 300, by = 100),
+#   eta = c(0.025, 0.05, 0.1, 0.3),
+#   max_depth = c(4, 5, 6),
+#   alpha = c(0, 5, 10),
+#   colsample_bytree = c(0.5, 0.75, 1.0),
+#   min_child_weight = c(1, 3, 5),
+#   subsample = c(1, 0.8, 0.7)
+# )
+# 
+# tune_control <- caret::trainControl(
+#   method = "cv", # cross-validation
+#   number = 4, # with n folds
+#   verboseIter = FALSE, # no training log
+#   allowParallel = FALSE
+# )
+# 
+# bst <- caret::train(
+#   x = dtrain,
+#   y =  train.label,
+#   trControl = tune_control,
+#   tuneGrid = hyperparam_grid,
+#   method = "xgbTree", #  this says we want XGB
+#   verbose = FALSE,
+#   verbosity = 0
+# )
+
+param <- list(max_depth = 6, eta = 0.3, verbose = 0, nthread = 4, alpha = 10, subsample = 0.8, colsample_bytree  = 0.8,min_child_weight = 1,
+              objective = "reg:squarederror", eval_metric = "logloss", 
+              booster = "gbtree") #ths is like the control parameters that we are specificing. lambda is the penality like lasso. 
+xgb.mod <- xgb.train(param, dtrain, nrounds = 500, watchlist)
+
+
+
+## predicting the test set
+p_test <- predict(xgb.mod,newdata = dtest)## Calculate the prediction error
+rmse <- sqrt(mean((test.label - p_test)^2))
+print(paste("RMSE on test set:", rmse))
+
+importance_matrix <- xgb.importance(feature_names = colnames(train.mat), model = xgb.mod)
+
+# Plot importance
+xgb.plot.importance(importance_matrix = importance_matrix)
+
+# View top important features
+print(importance_matrix)
+```
